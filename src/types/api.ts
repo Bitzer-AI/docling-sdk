@@ -673,8 +673,12 @@ export interface AsyncConversionTask {
   on(event: "complete", listener: (result: ConvertDocumentResponse) => void): this;
   on(event: "error", listener: (error: ProcessingError) => void): this;
 
-  poll(): Promise<TaskStatusResponse>;
-  waitForCompletion(): Promise<TaskStatusResponse>;
+  poll(waitSeconds?: number): Promise<TaskStatusResponse>;
+  waitForCompletion(options?: {
+    pollInterval?: number;
+    timeout?: number;
+    waitSeconds?: number;
+  }): Promise<TaskStatusResponse>;
   getResult(): Promise<ConvertDocumentResponse>;
   cancel?(): Promise<void>;
 }
@@ -692,8 +696,12 @@ export interface AsyncChunkTask {
   on(event: "complete", listener: (result: ChunkDocumentResponse) => void): this;
   on(event: "error", listener: (error: ProcessingError) => void): this;
 
-  poll(): Promise<TaskStatusResponse>;
-  waitForCompletion(): Promise<TaskStatusResponse>;
+  poll(waitSeconds?: number): Promise<TaskStatusResponse>;
+  waitForCompletion(options?: {
+    pollInterval?: number;
+    timeout?: number;
+    waitSeconds?: number;
+  }): Promise<TaskStatusResponse>;
   getResult(): Promise<ChunkDocumentResponse>;
   cancel?(): Promise<void>;
 }

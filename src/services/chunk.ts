@@ -340,8 +340,9 @@ export class ChunkService {
         }
       },
 
-      poll: () => this.pollTaskStatus(taskData.task_id),
-      waitForCompletion: () => this.waitForTaskCompletion(taskData.task_id),
+      poll: (waitSeconds?: number) => this.pollTaskStatus(taskData.task_id, waitSeconds),
+      waitForCompletion: (options?: { pollInterval?: number; timeout?: number; waitSeconds?: number }) =>
+        this.waitForTaskCompletion(taskData.task_id, options),
       getResult: () => this.getChunkTaskResult(taskData.task_id),
     };
 
@@ -350,36 +351,57 @@ export class ChunkService {
 
   /**
    * Poll task status
+   * @param taskId - Task ID to poll
+   * @param waitSeconds - Long-polling wait time (0 = immediate return, default 0)
    */
-  private async pollTaskStatus(taskId: string): Promise<TaskStatusResponse> {
-    const response = await this.http.get<TaskStatusResponse>(`/v1/status/poll/${taskId}`);
+  async pollTaskStatus(taskId: string, waitSeconds = 0): Promise<TaskStatusResponse> {
+    const endpoint = waitSeconds > 0
+      ? `/v1/status/poll/${taskId}?wait=${waitSeconds}`
+      : `/v1/status/poll/${taskId}`;
+    const response = await this.http.getJson<TaskStatusResponse>(endpoint);
     return response.data;
   }
 
   /**
-   * Wait for task completion
+   * Wait for task completion with configurable options
+   * @param taskId - Task ID to wait for
+   * @param options - Polling options
    */
-  private async waitForTaskCompletion(taskId: string): Promise<TaskStatusResponse> {
-    // Poll until completion
-    let status: TaskStatusResponse;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      status = await this.pollTaskStatus(taskId);
-      if (status.task_status === "success" || status.task_status === "failure") {
-        break;
-      }
-      // Wait before next poll
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
+  async waitForTaskCompletion(
+    taskId: string,
+    options: {
+      pollInterval?: number;
+      timeout?: number;
+      waitSeconds?: number;
+    } = {}
+  ): Promise<TaskStatusResponse> {
+    const pollInterval = options.pollInterval ?? 2000;
+    const timeout = options.timeout ?? 10 * 60 * 1000; // 10 minutes default
+    const waitSeconds = options.waitSeconds ?? 0; // No long-polling by default
 
-    return status;
+    const startTime = Date.now();
+    let status: TaskStatusResponse;
+
+    while (true) {
+      if (Date.now() - startTime > timeout) {
+        throw new Error(`Task ${taskId} timed out after ${timeout / 1000}s`);
+      }
+
+      status = await this.pollTaskStatus(taskId, waitSeconds);
+
+      if (status.task_status === "success" || status.task_status === "failure") {
+        return status;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
   }
 
   /**
    * Get chunk task result
    */
   private async getChunkTaskResult(taskId: string): Promise<ChunkDocumentResponse> {
-    const response = await this.http.get<ChunkDocumentResponse>(`/v1/result/${taskId}`);
+    const response = await this.http.getJson<ChunkDocumentResponse>(`/v1/result/${taskId}`);
     return response.data;
   }
 

@@ -225,7 +225,7 @@ export class AsyncTaskManager extends EventEmitter implements TypedAsyncTaskMana
    * Get task result when completed
    */
   async getTaskResult<T = unknown>(taskId: string): Promise<T> {
-    const response = await this.http.get<T>(`/v1/result/${taskId}`);
+    const response = await this.http.getJson<T>(`/v1/result/${taskId}`);
     return response.data;
   }
 

@@ -1061,8 +1061,9 @@ export class DoclingAPIClient implements DoclingAPI {
         }
       },
 
-      poll: () => this.pollTaskStatus(taskData.task_id),
-      waitForCompletion: () => this.waitForTaskCompletion(taskData.task_id),
+      poll: (waitSeconds?: number) => this.pollTaskStatus(taskData.task_id, waitSeconds),
+      waitForCompletion: (options?: { pollInterval?: number; timeout?: number; waitSeconds?: number }) =>
+        this.waitForTaskCompletionWithOptions(taskData.task_id, options),
       getResult: () => this.getTaskResult(taskData.task_id),
     };
 
@@ -1070,32 +1071,37 @@ export class DoclingAPIClient implements DoclingAPI {
   }
 
   /**
-   * Wait for task completion using centralized AsyncTaskManager
-   * This delegates all polling logic to the task manager for consistency
+   * Wait for task completion with configurable options
+   * @param taskId - Task ID to wait for
+   * @param options - Polling options
    */
-  private async waitForTaskCompletion(taskId: string): Promise<TaskStatusResponse> {
-    const taskManager = this.getTaskManager();
-    const waitSeconds = this.config.waitSeconds ?? 100;
-    const pollingRetries = this.config.pollingRetries ?? 5;
+  private async waitForTaskCompletionWithOptions(
+    taskId: string,
+    options: {
+      pollInterval?: number;
+      timeout?: number;
+      waitSeconds?: number;
+    } = {}
+  ): Promise<TaskStatusResponse> {
+    const pollInterval = options.pollInterval ?? 2000;
+    const timeout = options.timeout ?? 10 * 60 * 1000; // 10 minutes default
+    const waitSeconds = options.waitSeconds ?? 0; // No long-polling by default
 
-    // Start polling with the centralized task manager
-    taskManager.startPollingExistingTask(taskId, {
-      timeout: 15 * 60 * 1000, // 15 minutes max
-      pollInterval: 2000,
-      maxPolls: 450, // 15 minutes / 2 seconds
-      waitSeconds,
-      pollingRetries,
-    });
+    const startTime = Date.now();
 
-    // Wait for completion using the task manager
-    const result = await taskManager.waitForCompletion(taskId);
+    while (true) {
+      if (Date.now() - startTime > timeout) {
+        throw new Error(`Task ${taskId} timed out after ${timeout / 1000}s`);
+      }
 
-    if (!result.success) {
-      throw new Error(result.error?.message || "Task failed");
+      const status = await this.pollTaskStatus(taskId, waitSeconds);
+
+      if (status.task_status === "success" || status.task_status === "failure") {
+        return status;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
-
-    // Return the final status
-    return this.pollTaskStatus(taskId, 0);
   }
 
   /**
