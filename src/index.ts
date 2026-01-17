@@ -5,6 +5,7 @@ export * from "./types";
 
 export * from "./utils/validation";
 export * from "./utils/result";
+export * from "./utils/s3-presign";
 
 export { CliUtils } from "./cli/utils";
 
